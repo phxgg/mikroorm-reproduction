@@ -7,7 +7,9 @@
     "declaration": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "strictPropertyInitialization": false,
+    "isolatedModules": true,
   },
   "include": [
     "./src/**/*.ts"

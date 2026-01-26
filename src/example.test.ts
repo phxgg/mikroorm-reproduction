@@ -1,4 +1,13 @@
-import { Entity, MikroORM, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { Collection, Entity, ManyToMany, ManyToOne, MikroORM, PrimaryKey, Property, type Ref } from '@mikro-orm/sqlite';
+
+@Entity()
+class Role {
+  @PrimaryKey()
+  id!: number;
+
+  @Property()
+  name: string;
+}
 
 @Entity()
 class User {
@@ -12,11 +21,22 @@ class User {
   @Property({ unique: true })
   email: string;
 
-  constructor(name: string, email: string) {
-    this.name = name;
-    this.email = email;
-  }
+  // eager set to true
+  @ManyToMany({ entity: () => Role, eager: true })
+  roles = new Collection<Role>(this);
+}
 
+@Entity()
+class Post {
+  @PrimaryKey()
+  id!: number;
+
+  @Property()
+  title: string;
+
+  // eager set to false
+  @ManyToOne({ entity: () => User, ref: true, eager: false })
+  createdBy: Ref<User>;
 }
 
 let orm: MikroORM;
@@ -24,7 +44,7 @@ let orm: MikroORM;
 beforeAll(async () => {
   orm = await MikroORM.init({
     dbName: ':memory:',
-    entities: [User],
+    entities: [Role, User, Post],
     debug: ['query', 'query-params'],
     allowGlobalContext: true, // only for testing
   });
@@ -35,17 +55,15 @@ afterAll(async () => {
   await orm.close(true);
 });
 
-test('basic CRUD example', async () => {
-  orm.em.create(User, { name: 'Foo', email: 'foo' });
+test('eager loading with exclusions', async () => {
+  const role = orm.em.create(Role, { name: 'Test Role' });
+  const user = orm.em.create(User, { name: 'Foo', email: 'foo', roles: [role] });
+  const post = orm.em.create(Post, { title: 'Hello World', createdBy: user });
+
   await orm.em.flush();
   orm.em.clear();
 
-  const user = await orm.em.findOneOrFail(User, { email: 'foo' });
-  expect(user.name).toBe('Foo');
-  user.name = 'Bar';
-  orm.em.remove(user);
-  await orm.em.flush();
-
-  const count = await orm.em.count(User, { email: 'foo' });
-  expect(count).toBe(0);
+  const loadedPost = await orm.em.findOneOrFail(Post, { id: post.id }, { populate: ['createdBy'], exclude: ['createdBy.name', 'createdBy.roles'] });
+  const json = loadedPost.createdBy.toJSON();
+  expect(json.roles).toBe(undefined);
 });
